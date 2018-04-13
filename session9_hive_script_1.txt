@@ -1,0 +1,215 @@
+# CREATE EMPLOYEE DATABASE #
+
+  CREATE DATABASE IF NOT EXISTS employee_db;
+  
+  Create database employee_db location '/user/myuser/database/employee_db.db';
+
+# USE EMPLOYEE DATABASE #
+
+  USE employee_db;  
+  
+-------------------------------------------------------------------------------------------
+
+# CREATE EMPLOYEE TABLE #
+
+CREATE TABLE IF NOT EXISTS employee_tbl (
+empid INT,
+name STRING,
+state STRING,
+birthyear STRING)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+TBLPROPERTIES("skip.header.line.count"="1");	
+
+# CREATE EMPLOYEE SALARY TABLE #
+
+CREATE TABLE IF NOT EXISTS emp_salary (
+empid INT,
+year STRING,
+salary FLOAT)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+TBLPROPERTIES("skip.header.line.count"="1");	
+
+-------------------------------------------------------------------------------------------
+
+# LOAD EMPLOYEE DATASET USING LOAD COMMAND #
+
+LOAD DATA INPATH '/user/myuser/data/employee/employee.csv' INTO TABLE employee_tbl;
+
+# LOAD SALARY DATASET USING LOAD COMMAND #
+
+LOAD DATA INPATH '/user/myuser/data/salary/emp_salary.csv' INTO TABLE emp_salary;
+
+-------------------------------------------------------------------------------------------
+
+# CHECK LOCATION OF EMPLOYEE AND SALARY TABLES #
+
+!hadoop fs -ls /user/hive/warehouse/employee_db.db/employee_tbl;
+
+!hadoop fs -ls /user/hive/warehouse/employee_db.db/emp_salary;
+
+-------------------------------------------------------------------------------------------
+
+# CHECK EMPLOYEE & SALARY DATA LOADED #
+
+SELECT * FROM employee_tbl
+WHERE state = 'KS' and birthyear = '1975';
+
+SELECT * FROM emp_salary
+WHERE year = '2017';
+
+-------------------------------------------------------------------------------------------
+
+# CREATE PARTITION TABLE FOR EMPLOYEE #
+
+CREATE TABLE IF NOT EXISTS emp_partition (
+empid INT,
+name STRING,
+state STRING,
+birthyear STRING)
+PARTITIONED BY (emp_state STRING)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+TBLPROPERTIES("skip.header.line.count"="1");	
+
+# CREATE PARTITION TABLE FOR SALARY #
+
+CREATE TABLE IF NOT EXISTS sal_partition (
+empid INT,
+year STRING,
+salary FLOAT)
+PARTITIONED BY (sal_year STRING)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+TBLPROPERTIES("skip.header.line.count"="1");	
+
+-------------------------------------------------------------------------------------------
+
+# CHECK PARTITION TABLES CREATED #
+
+DESCRIBE FORMATTED emp_partition;
+
+DESCRIBE FORMATTED sal_partition;
+
+-------------------------------------------------------------------------------------------
+
+# CHECK PARTITION DETAILS #
+
+SHOW PARTITIONS emp_partition;
+
+SHOW PARTITIONS sal_partition;
+
+-------------------------------------------------------------------------------------------
+
+LOAD DATA INPATH '/user/myuser/data/employee/employee_ks.csv' INTO TABLE emp_partition PARTITION (emp_state='KS');
+
+LOAD DATA INPATH '/user/myuser/data/employee/employee_ca.csv' INTO TABLE emp_partition PARTITION (emp_state='CA');
+
+-------------------------------------------------------------------------------------------
+
+# DETAILS ABOUT PARTITON #
+
+!hadoop fs -ls /user/hive/warehouse/employee_db.db/emp_partition;
+ 
+!hadoop fs -ls /user/hive/warehouse/employee_db.db/emp_partition/emp_state=KS;
+
+!hadoop fs -ls /user/hive/warehouse/employee_db.db/emp_partition/emp_state=CA;
+
+-------------------------------------------------------------------------------------------
+
+# LOADING PARTITIONS USING INSERT...SELECT #
+
+INSERT OVERWRITE TABLE emp_partition
+PARTITION (emp_state= 'KS')
+SELECT * FROM employee_tbl e
+WHERE e.state = 'KS';
+
+INSERT OVERWRITE TABLE sal_partition
+PARTITION (sal_year= '2017')
+SELECT * FROM emp_salary s
+WHERE s.year = '2017';
+
+-------------------------------------------------------------------------------------------
+
+# DETAILS ABOUT PARTITON #
+
+
+!hadoop fs -ls /user/hive/warehouse/employee_db.db/emp_partition;
+
+!hadoop fs -ls /user/hive/warehouse/employee_db.db/sal_partition;
+
+SELECT with partition column in the where clause
+
+SELECT * FROM emp_partition
+WHERE state = 'KS';
+
+SELECT * FROM sal_partition
+WHERE year = '2017';
+
+-------------------------------------------------------------------------------------------
+
+# CREATE MULTIPLE PARTITIONS USING INSERT #
+
+--Multiple partitions using single insert
+
+FROM employee_tbl e
+INSERT OVERWRITE TABLE emp_partition
+PARTITION (emp_state= 'KS')
+SELECT * WHERE state = 'KS'
+INSERT OVERWRITE TABLE emp_partition
+PARTITION (emp_state= 'CA')
+SELECT * WHERE state = 'CA';
+
+FROM emp_salary s
+INSERT OVERWRITE TABLE sal_partition
+PARTITION (sal_year = '2017')
+SELECT * WHERE year = '2017';
+INSERT OVERWRITE TABLE sal_partition
+PARTITION (sal_year = '2018')
+SELECT * WHERE year = '2018';
+
+-------------------------------------------------------------------------------------------
+
+# DROPPING A PARTITION #
+
+ALTER TABLE emp_partition DROP IF EXISTS PARTITION (emp_state= 'KS');
+
+SHOW PARTITIONS emp_partition;
+
+===========================================================================================
+# ENABLE DYNAMIC PARTITION #
+===========================================================================================
+
+SET hive.exec.dynamic.partition=true;
+
+--Setting dynamic partition mode to nonstrict. (Strict by default)
+
+SET hive.exec.dynamic.partition.mode=nonstrict;
+
+--Set the number of partitions per node. 
+SET hive.exec.max.dynamic.partitions=1000;
+SET hive.exec.max.dynamic.partitions.pernode=500;
+
+-------------------------------------------------------------------------------------------
+
+
+# CREATE DYNAMIC PARTITION TABLE FOR EMPLOYEE #
+
+CREATE TABLE IF NOT EXISTS emp_dyn_partition (
+empid INT,
+name STRING,
+birthyear STRING)
+PARTITIONED BY (emp_state STRING)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+TBLPROPERTIES("skip.header.line.count"="1");
+
+
+INSERT OVERWRITE TABLE emp_partition
+PARTITION (emp_state)
+SELECT e.*, e.state
+FROM employee_tbl e;
+
+-------------------------------------------------------------------------------------------
+
+# DROP EMPLOYEE DATABASE #
+
+  DROP DATABASE IF EXISTS employee_db CASCADE;
+  
+  -------------------------------------------------------------------------------------------
